@@ -1,7 +1,7 @@
 // student number: 223011367
 // main screen after login
 
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native'
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -11,13 +11,14 @@ import CaseForm from '../components/CaseForm'
 import CaseList from '../components/CaseList'
 
 export default function Q1CasesScreen({ uid }) {
-  const [cases, setCases] = React.useState([])
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState('')
-  const [fromCache, setFromCache] = React.useState(false)
+  const [cases, setCases] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [fromCache, setFromCache] = useState(false)
 
   useEffect(() => {
     let unsubscribe = null
+    let cancelled = false
 
     async function setup() {
       const cacheKey = `@uj/cases/${uid}`
@@ -25,7 +26,7 @@ export default function Q1CasesScreen({ uid }) {
       // try cache first
       try {
         const cached = await AsyncStorage.getItem(cacheKey)
-        if (cached !== null) {
+        if (!cancelled && cached !== null) {
           setCases(JSON.parse(cached))
           setFromCache(true)
           setLoading(false)
@@ -34,7 +35,9 @@ export default function Q1CasesScreen({ uid }) {
         console.log('cache read failed', err)
       }
 
-      // now listen for live data
+      if (cancelled) return
+
+      // live listener
       const q = query(collection(db, 'users', uid, 'cases'), orderBy('createdAt', 'desc'))
       unsubscribe = onSnapshot(
         q,
@@ -49,7 +52,7 @@ export default function Q1CasesScreen({ uid }) {
         },
         err => {
           console.log('listener error', err)
-          setError('')
+          setError('Could not load cases. Check your connection.')
           setLoading(false)
         }
       )
@@ -57,11 +60,9 @@ export default function Q1CasesScreen({ uid }) {
 
     setup()
 
-    // cleanup on logout
     return () => {
+      cancelled = true
       if (unsubscribe) unsubscribe()
-      setCases([])
-      setFromCache(false)
     }
   }, [uid])
 
